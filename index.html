@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Random Directus Image</title>
+    <style>
+        /* CSS for full-screen background image */
+        body {
+            margin: 0;
+            padding: 0;
+            /* Hide overflow to prevent scrollbars */
+            overflow: hidden; 
+            background-color: #1a1a1a; /* Dark background while image loads */
+        }
+
+        #fullscreen-image {
+            /* Full viewport size */
+            width: 100vw;
+            height: 100vh;
+            /* Center the image */
+            display: block;
+            margin: 0 auto;
+            /* Ensure the image covers the entire screen without distortion */
+            object-fit: cover;
+            /* Animation for a smoother transition */
+            transition: opacity 0.5s ease-in-out;
+            opacity: 0; /* Start hidden */
+        }
+
+        /* Loading state message */
+        #loading-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ffffff;
+            font-family: sans-serif;
+            font-size: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+
+    <p id="loading-message">Loading random image from Directus...</p>
+    <img id="fullscreen-image" src="" alt="A random image from the Directus API">
+
+    <script>
+        // --- CONFIGURATION ---
+        const DIRECTUS_URL = 'https://directus.museologi.st'; // Replace with your Directus instance URL (e.g., https://my.directus.app)
+        const COLLECTION_NAME = 'aldburyImages'; // Replace with the name of your collection containing images (e.g., 'images', 'posts')
+        // Assuming your image field is named 'image_file'
+        const IMAGE_FIELD_NAME = 'image'; 
+        // ---------------------
+
+
+        const imageElement = document.getElementById('fullscreen-image');
+        const loadingMessage = document.getElementById('loading-message');
+
+        /**
+         * Fetches a random item from a Directus collection and displays its image.
+         */
+        async function fetchRandomImage() {
+            try {
+                // 1. Fetch a single random item from the collection
+                // The `limit: 1` and `sort: '-*' (random)` are key here.
+                const apiUrl = `${DIRECTUS_URL}/items/${COLLECTION_NAME}?limit=1&sort=-*`;
+                
+                const response = await fetch(apiUrl);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                // Check if any items were returned
+                if (data.data && data.data.length > 0) {
+                    const item = data.data[0];
+                    const fileId = item[IMAGE_FIELD_NAME];
+                    
+                    if (fileId) {
+                        // 2. Construct the Directus file URL using the file ID
+                        // This uses the /assets endpoint which handles image scaling and serving
+                        const imageUrl = `${DIRECTUS_URL}/assets/${fileId}`;
+                        
+                        // 3. Set the image source and display it
+                        imageElement.src = imageUrl;
+                        
+                        // Wait for the image to load before fading it in
+                        imageElement.onload = () => {
+                            loadingMessage.style.display = 'none'; // Hide loading message
+                            imageElement.style.opacity = 1; // Fade in the image
+                        };
+                        
+                        // Handle case where image loads instantly (cached)
+                        if (imageElement.complete) {
+                            imageElement.onload();
+                        }
+                    } else {
+                        throw new Error(`Item found but no file ID in field '${IMAGE_FIELD_NAME}'.`);
+                    }
+                } else {
+                    throw new Error(`No items found in the collection '${COLLECTION_NAME}'.`);
+                }
+
+            } catch (error) {
+                console.error("Error fetching or displaying image:", error);
+                loadingMessage.innerText = `Error: ${error.message}. Check console for details.`;
+                loadingMessage.style.color = '#ff4444';
+            }
+        }
+
+        // Run the function when the page loads
+        document.addEventListener('DOMContentLoaded', fetchRandomImage);
+    </script>
+
+</body>
+</html>
