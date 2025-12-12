@@ -9,8 +9,7 @@
         body {
             margin: 0;
             padding: 0;
-            /* Hide overflow to prevent scrollbars */
-            overflow: hidden; 
+            overflow: hidden; /* Hide overflow to prevent scrollbars */
             background-color: #1a1a1a; /* Dark background while image loads */
         }
 
@@ -47,89 +46,105 @@
 
     <script>
         // --- CONFIGURATION ---
-        const DIRECTUS_URL = 'https://directus.museologi.st'; // Replace with your Directus instance URL (e.g., https://my.directus.app)
-        const COLLECTION_NAME = 'aldburyImages'; // Replace with the name of your collection containing images (e.g., 'images', 'posts')
-        // Assuming your image field is named 'image_file'
+        // 1. Directus URL (Must be the base URL)
+        const DIRECTUS_URL = 'https://directus.museologi.st'; 
+        // 2. Name of your collection containing images
+        const COLLECTION_NAME = 'aldburyImages'; 
+        // 3. The name of the field in that collection that holds the File ID (often named 'image' or 'file')
         const IMAGE_FIELD_NAME = 'image'; 
-        const AUTH_TOKEN = ''; // Optional: Add your Directus API token here if needed for private collections
+        // 4. Optional: API Token (only needed for private collections)
+        const AUTH_TOKEN = ''; 
+        // 5. How many items to fetch for the random pool (client-side randomness)
+        const RANDOM_POOL_SIZE = 100;
         // ---------------------
 
 
         const imageElement = document.getElementById('fullscreen-image');
         const loadingMessage = document.getElementById('loading-message');
-        const RANDOM_POOL_SIZE = 100;
-       /**
- * Fetches a limited number of items from a Directus collection (sorted by date)
- * and then selects one item at random using client-side Math.
- * * @returns {Promise<Object | null>} The randomly selected item object, or null on failure.
- */
-async function getRandomItemFromCollection() {
-    
-    // 1. Construct the API URL to fetch a limited subset of items.
-    // Sorting by '-date_created' (newest first) ensures a stable list for the pool.
-    const url = `${DIRECTUS_URL}/items/${COLLECTION_NAME}?limit=${RANDOM_POOL_SIZE}&sort=-created`;
 
-    try {
-        // 2. Execute the GET request to the Directus API.
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${AUTH_TOKEN}`
+        /**
+         * Fetches a limited number of items from a Directus collection (sorted by date)
+         * and then selects one item at random using client-side Math.
+         * @returns {Promise<Object | null>} The randomly selected item object, or null on failure.
+         */
+        async function getRandomItemFromCollection() {
+            // Include the IMAGE_FIELD_NAME in the fields parameter to ensure it's returned
+            const url = `${DIRECTUS_URL}/items/${COLLECTION_NAME}?limit=${RANDOM_POOL_SIZE}&sort=-created&fields=${IMAGE_FIELD_NAME}`;
+
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        // Only include Authorization header if a token is provided
+                        ...(AUTH_TOKEN && { 'Authorization': `Bearer ${AUTH_TOKEN}` })
+                    }
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`API Error: ${response.status} - ${errorData.errors[0]?.message || response.statusText}`);
+                }
+
+                const data = await response.json();
+                const items = data.data;
+
+                if (!items || items.length === 0) {
+                    throw new Error(`The collection "${COLLECTION_NAME}" is empty or no items were returned.`);
+                }
+
+                // Client-Side Randomization Logic
+                const listSize = items.length;
+                const randomIndex = Math.floor(Math.random() * listSize);
+                const randomItem = items[randomIndex];
+                
+                return randomItem;
+
+            } catch (error) {
+                console.error("❌ Failed to complete random item selection:", error.message);
+                // Hide loading message and show a user-friendly error
+                loadingMessage.textContent = `Error: ${error.message}`;
+                return null;
             }
-        });
-
-        // Handle HTTP errors (e.g., 401, 403, 404)
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(`API Error: ${response.status} - ${errorData.errors[0]?.message || response.statusText}`);
         }
 
-        const data = await response.json();
-        const items = data.data;
 
-        if (!items || items.length === 0) {
-            console.warn(`The collection "${COLLECTION_NAME}" is empty or no items were returned.`);
-            return null;
-        }
+        // --- EXECUTION ---
+        getRandomItemFromCollection()
+            .then(item => {
+                if (item) {
+                    // 1. Get the File ID from the random item
+                    const fileId = item[IMAGE_FIELD_NAME];
 
-        // 3. Client-Side Randomization Logic
-        const listSize = items.length;
-        
-        // Generate a random integer index between 0 (inclusive) and listSize (exclusive)
-        // This index points to a random item in the fetched array.
-        const randomIndex = Math.floor(Math.random() * listSize);
+                    if (!fileId) {
+                        console.error(`❌ Field '${IMAGE_FIELD_NAME}' is missing or null in the selected item.`);
+                        loadingMessage.textContent = `Error: Image field not found on item.`;
+                        return;
+                    }
 
-        // 4. Select and Return the Item
-        const randomItem = items[randomIndex];
+                    // 2. Construct the Directus File Endpoint URL
+                    // Directus file endpoint: [DIRECTUS_URL]/assets/[FILE_ID]
+                    const imageUrl = `${DIRECTUS_URL}/assets/${fileId}`;
+                    
+                    // You can add an optional image processing parameter here, e.g., to resize it to fill the screen:
+                    // const imageUrl = `${DIRECTUS_URL}/assets/${fileId}?width=${window.innerWidth}&height=${window.innerHeight}&quality=80&fit=cover`;
 
-        console.log("-----------------------------------------");
-        console.log(`✅ Success: Fetched ${listSize} items.`);
-        console.log(`✅ Selected item at array index: ${randomIndex}`);
-        console.log("-----------------------------------------");
-        
-        return randomItem;
+                    // 3. Assign the URL to the image element
+                    imageElement.src = imageUrl;
 
-    } catch (error) {
-        console.error("❌ Failed to complete random item selection:", error.message);
-        return null;
-    }
-}
-
-// --- EXECUTION ---
-getRandomItemFromCollection()
-    .then(item => {
-        if (item) {
-            console.log("\n--- Randomly Selected Item Data ---");
-            console.log(item);
-            
-            // Example of accessing specific fields:
-            // console.log(`Item ID: ${item.id}`);
-            // console.log(`Item Title: ${item.title}`); 
-        } else {
-            console.log("No item could be randomly selected.");
-        }
-    });
+                    // 4. Set up an event listener to hide the loading message and fade the image in once it loads
+                    imageElement.onload = () => {
+                        loadingMessage.style.display = 'none';
+                        imageElement.style.opacity = 1;
+                    };
+                    
+                    // 5. Handle image loading errors
+                    imageElement.onerror = () => {
+                        loadingMessage.textContent = "Error: Failed to load image from Directus.";
+                    };
+                    
+                }
+            });
 
     </script>
 
